@@ -131,14 +131,15 @@ void BtreeSplitChildren(int fd, const BTreeHeader* header,
       right_child->payload->children[i] = left_child->payload->children[i + header->order];
     }
   }
-
   left_child->payload->count = header->order - 1;
+  
   for (int i = node->payload->count; i > child_num; i--) {
     node->payload->children[i + 1] = node->payload->children[i];
   }
+
   node->payload->children[child_num + 1] = right_child->address;
   
-  for (int i = (int)node->payload->count - 1; i > child_num; i--) {
+  for (int i = (int)node->payload->count - 1; i >= child_num; i--) {
     node->payload->keys[i + 1] = node->payload->keys[i];
   }
   node->payload->keys[child_num] = left_child->payload->keys[header->order - 1];
@@ -172,7 +173,6 @@ void BTreeInsertNonfull(int fd, const BTreeHeader* header, DiskNode* node, const
 		}
 
     i++;
-
     DiskNode* child = ReadNodeFromDisk(fd, header, node->payload->children[i]);
     if (child->payload->count == header->order * 2 - 1) {
       BtreeSplitChildren(fd, header, node, child, i);
@@ -181,7 +181,8 @@ void BTreeInsertNonfull(int fd, const BTreeHeader* header, DiskNode* node, const
       } 
     }
 
-    BTreeNodeReadFromDisk(fd, header, child->payload, node->payload->children[i]);
+    child->address = node->payload->children[i];
+    BTreeNodeReadFromDisk(fd, header, child->payload, child->address);
 
     BTreeInsertNonfull(fd, header, child, key);
 
@@ -239,7 +240,7 @@ void GenerateDotRecursive(int fd, const BTreeHeader* header,
   fprintf(dot_file, "  node_%ld [label=\"", (long)offset);
   for (size_t i = 0; i < node->payload->count; i++) {
     fprintf(dot_file, "%u", node->payload->keys[i]);
-    if (i < node->payload->count - 1) {
+    if (i != node->payload->count - 1) {
       fprintf(dot_file, " | ");
     }
   }

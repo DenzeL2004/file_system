@@ -75,7 +75,7 @@ TEST_F(BTreeTest, SplitNode) {
   uint32_t order = 2;
   BTreeCreate(fd, order);
   
-  KeyType keys[] = {3, 2, 1, 5, 4};
+  KeyType keys[] = {3, 2, 1, 5, 4, 6};
   for (KeyType key : keys) {
     BTreeInsert(fd, key);
   }
@@ -85,23 +85,30 @@ TEST_F(BTreeTest, SplitNode) {
   
   DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_address);
   EXPECT_FALSE(root->payload->is_leaf); 
-  EXPECT_EQ(root->payload->count, 1);  
+  EXPECT_EQ(root->payload->count, 2);  
   EXPECT_EQ(root->payload->keys[0], 2);
+  EXPECT_EQ(root->payload->keys[1], 4);
 
-  DiskNode* left = ReadNodeFromDisk(fd, &header, root->payload->children[0]);
-  EXPECT_TRUE(left->payload->is_leaf);
-  EXPECT_EQ(left->payload->count, 1);  
-  EXPECT_EQ(left->payload->keys[0], 1);
+  DiskNode* child_1 = ReadNodeFromDisk(fd, &header, root->payload->children[0]);
+  EXPECT_TRUE(child_1->payload->is_leaf);
+  EXPECT_EQ(child_1->payload->count, 1);  
+  EXPECT_EQ(child_1->payload->keys[0], 1);
 
-  DiskNode* right = ReadNodeFromDisk(fd, &header, root->payload->children[1]);
-  EXPECT_TRUE(right->payload->is_leaf);
-  EXPECT_EQ(right->payload->count, 3);  
-  EXPECT_EQ(right->payload->keys[0], 3);
-  EXPECT_EQ(right->payload->keys[1], 4);
-  EXPECT_EQ(right->payload->keys[2], 5);
+  DiskNode* child_2 = ReadNodeFromDisk(fd, &header, root->payload->children[1]);
+  EXPECT_TRUE(child_2->payload->is_leaf);
+  EXPECT_EQ(child_2->payload->count, 1);  
+  EXPECT_EQ(child_2->payload->keys[0], 3);
 
-  DeleteDiskNode(right);
-  DeleteDiskNode(left);
+  DiskNode* child_3 = ReadNodeFromDisk(fd, &header, root->payload->children[2]);
+  EXPECT_TRUE(child_3->payload->is_leaf);
+  EXPECT_EQ(child_3->payload->count, 2);  
+  EXPECT_EQ(child_3->payload->keys[0], 5);
+  EXPECT_EQ(child_3->payload->keys[1], 6);
+
+
+  DeleteDiskNode(child_3);
+  DeleteDiskNode(child_2);
+  DeleteDiskNode(child_1);
   DeleteDiskNode(root);
 }
 
