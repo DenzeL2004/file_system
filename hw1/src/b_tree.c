@@ -52,7 +52,10 @@ void BTreeWriteHeader(int fd, BTreeHeader* header) {
 }
 
 void BTreeCreate(int fd, uint32_t order) { 
-	BTreeHeader header = {0, order};
+  BTreeHeader header;
+  header.root_address = 0;     
+  header.order = order;  
+  
 	write(fd, &header, sizeof(BTreeHeader));
 }
 
@@ -111,7 +114,7 @@ DiskNode* ReadNodeFromDisk(int fd, const BTreeHeader* header, OffsetType offset)
 void DeleteDiskNode(DiskNode* node) {
   assert(node != NULL);
 
-  free(node->payload);
+  DeleteBTreeNode(node->payload);
   free(node);
 }
 
@@ -183,7 +186,6 @@ void BTreeInsertNonfull(int fd, const BTreeHeader* header, DiskNode* node, const
 
     child->address = node->payload->children[i];
     BTreeNodeReadFromDisk(fd, header, child->payload, child->address);
-
     BTreeInsertNonfull(fd, header, child, key);
 
     DeleteDiskNode(child);
@@ -220,6 +222,8 @@ void BTreeInsert(int fd, const KeyType key) {
       
       BtreeSplitChildren(fd, &header, new_root, root, 0);
       BTreeInsertNonfull(fd, &header, new_root, key);
+
+      DeleteDiskNode(new_root);
     } else {
       BTreeInsertNonfull(fd, &header, root, key);
     }

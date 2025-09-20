@@ -124,7 +124,19 @@ TEST_F(BTreeTest, LargeInsertion) {
   BTreeReadHeader(fd, &header);
   
   DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_address);
-  // EXPECT_GT(root->payload->count, 0);
+  EXPECT_EQ(root->payload->count, 4);
+
+  for (size_t i = 0; i < 5; i++) {
+    DiskNode* child = ReadNodeFromDisk(fd, &header, root->payload->children[i]);
+    
+    if (i != 4) {
+      EXPECT_EQ(child->payload->count, 3);
+    } else {
+      EXPECT_EQ(child->payload->count, 4);
+    }
+
+    DeleteDiskNode(child);
+  }
   
   DeleteDiskNode(root);
 }
