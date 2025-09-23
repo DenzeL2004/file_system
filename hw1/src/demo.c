@@ -11,7 +11,7 @@ int main() {
 		return 1;
 	}
 
-	uint32_t order = 4;
+	uint32_t order = 2;
 	BTreeCreate(fd, order);
 
 	printf("Building B-Tree with order %u\n", order);
@@ -22,8 +22,8 @@ int main() {
 		BTreeInsert(fd, &key);
 	}
 
-	printf("\nGenerating visualization...\n");
-	BTreeVisualize(fd, "b_tree.dot", "b_tree.png");
+	// printf("\nGenerating visualization...\n");
+	// BTreeVisualize(fd, "b_tree.dot", "b_tree.png");
 
 	close(fd);
 	return 0;

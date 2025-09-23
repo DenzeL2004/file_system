@@ -210,6 +210,69 @@ TEST_F(BTreeTest, InsertRepeatKey) {
   DeleteDiskNode(root);
 }
 
+TEST_F(BTreeTest, FindInEmptyTree) {
+  uint32_t order = 3;
+  BTreeCreate(fd, order);
+  
+  KeyType key = make_key("test_key");
+
+  EXPECT_EQ(BTreeFind(fd, &key), 0);
+}
+
+TEST_F(BTreeTest, FindInSimpleTree) {
+  uint32_t order = 3;
+  BTreeCreate(fd, order);
+  
+  for (int i = 1; i <= 3; ++i) {
+    KeyType key = make_key(i);
+    BTreeInsert(fd, &key);
+  }
+
+  BTreeHeader header;
+  BTreeReadHeader(fd, &header);
+  EXPECT_NE(header.root_offset, 0);
+
+  DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
+
+  KeyType key = make_key(1);
+  EXPECT_EQ(BTreeFind(fd, &key), root->offset);
+  
+  KeyType not_exist_key = make_key(10);
+  EXPECT_EQ(BTreeFind(fd, &not_exist_key), 0);
+
+  DeleteDiskNode(root);
+}
+
+TEST_F(BTreeTest, FindInTree) {
+  uint32_t order = 2;
+  BTreeCreate(fd, order);
+  
+  for (int i = 1; i <= 9; ++i) {
+    KeyType key = make_key(i);
+    BTreeInsert(fd, &key);
+  }
+
+  BTreeHeader header;
+  BTreeReadHeader(fd, &header);
+  EXPECT_NE(header.root_offset, 0);
+
+  DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
+
+  KeyType key_1 = make_key(6);
+  EXPECT_EQ(BTreeFind(fd, &key_1), root->payload->children[1]);
+
+  DiskNode* left = ReadNodeFromDisk(fd, &header, root->payload->children[0]);
+
+  KeyType key_2 = make_key(3);
+  EXPECT_EQ(BTreeFind(fd, &key_2), left->payload->children[1]);
+  
+  KeyType not_exist_key = make_key(10);
+  EXPECT_EQ(BTreeFind(fd, &not_exist_key), 0);
+
+  DeleteDiskNode(left);
+  DeleteDiskNode(root);
+}
+
 
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);

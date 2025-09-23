@@ -259,6 +259,51 @@ void BTreeInsert(int fd, const KeyType* key) {
   BTreeWriteHeader(fd, &header); 
 }
 
+OffsetType BTreeFindNode(int fd, const BTreeHeader* header, DiskNode* node, const KeyType* key) {
+
+  int i = (int)(node->payload->count - 1);
+
+  int cmp_res = -1;
+  while (i >= 0 && (cmp_res = KeyCompare(key, &node->payload->keys[i])) < 0) {
+    i--;
+  }
+
+  if (i != -1 && cmp_res == 0) {
+    return node->offset;
+  }
+
+  if (node->payload->is_leaf) {
+    return 0;
+  }
+
+  i++;
+
+  DiskNode* child = ReadNodeFromDisk(fd, header, node->payload->children[i]);
+
+  OffsetType offset = BTreeFindNode(fd, header, child, key);
+
+  DeleteDiskNode(child);
+
+  return offset;
+}
+
+OffsetType BTreeFind(int fd, const KeyType* key) {
+	BTreeHeader header;
+	BTreeReadHeader(fd, &header);
+
+  if (header.root_offset == 0) {
+    return 0;
+  }
+  
+  DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
+
+  OffsetType offset = BTreeFindNode(fd, &header, root, key);
+
+  DeleteDiskNode(root);
+
+  return offset;
+}
+
 void GenerateDotRecursive(int fd, const BTreeHeader* header, 
                           OffsetType offset, FILE* dot_file) {
   if (offset == 0) return;
