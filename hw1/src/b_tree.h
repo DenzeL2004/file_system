@@ -5,32 +5,37 @@
 #include <fcntl.h>
 #include <stdio.h>
 
-#define BTREE_KEY_LEN
+#define BTREE_KEY_LEN 256
 
-typedef uint32_t KeyType;
 typedef uint64_t OffsetType;
 
+typedef struct KeyType {
+	char data[BTREE_KEY_LEN];
+} KeyType;
+
 typedef struct BTreeNode {
-    uint8_t is_delete;
-    uint8_t is_leaf;
-    size_t count;    
-    KeyType* keys;
-    OffsetType* children;
+	uint8_t is_delete;
+	uint8_t is_leaf;
+	size_t count;    
+	KeyType* keys;
+	OffsetType* children;
 } BTreeNode;
 
 typedef struct DiskNode {
-    OffsetType offset;
-    BTreeNode* payload;
+	OffsetType offset;
+	BTreeNode* payload;
 } DiskNode;
 
 typedef struct BTreeHeader {
-    OffsetType root_offset;
-    uint32_t order;
+	OffsetType root_offset;
+	uint32_t order;
 } BTreeHeader;
 
+int KeyCompare(const KeyType* lhs, const KeyType* rhs);
+void KeyCopy(KeyType* dst,const KeyType* src);
 
 void BTreeCreate(int fd, uint32_t order);
-void BTreeInsert(int fd, const KeyType key);
+void BTreeInsert(int fd, const KeyType* key);
 
 BTreeNode* CreateBTreeNode(uint32_t order);
 void DeleteBTreeNode(BTreeNode* node);

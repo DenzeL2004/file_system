@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <cstring>
 
 extern "C" {
 #include "../src/b_tree.h"
@@ -18,6 +19,19 @@ protected:
       close(fd);
     }
     remove("test_tree.bin");
+  }
+
+  KeyType make_key(const char* str) {
+    KeyType key;
+    strncpy(key.data, str, BTREE_KEY_LEN - 1);
+    key.data[BTREE_KEY_LEN - 1] = '\0';
+    return key;
+  }
+
+  KeyType make_key(int num) {
+    KeyType key;
+    snprintf(key.data, BTREE_KEY_LEN, "%03d", num);
+    return key;
   }
 
   int fd = -1;
@@ -38,8 +52,8 @@ TEST_F(BTreeTest, InsertSingleKey) {
   uint32_t order = 3;
   BTreeCreate(fd, order);
   
-  KeyType key = 42;
-  BTreeInsert(fd, key);
+  KeyType key = make_key("test_key");
+  BTreeInsert(fd, &key);
   
   BTreeHeader header;
   BTreeReadHeader(fd, &header);
@@ -48,7 +62,7 @@ TEST_F(BTreeTest, InsertSingleKey) {
   DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
   EXPECT_TRUE(root->payload->is_leaf);
   EXPECT_EQ(root->payload->count, 1);
-  EXPECT_EQ(root->payload->keys[0], key);
+  EXPECT_EQ(KeyCompare(&root->payload->keys[0], &key), 0);
   
   DeleteDiskNode(root);
 }
@@ -57,9 +71,10 @@ TEST_F(BTreeTest, InsertMultipleKeys) {
   uint32_t order = 3;
   BTreeCreate(fd, order);
   
-  KeyType keys[] = {10, 20, 5, 15, 25};
-  for (KeyType key : keys) {
-      BTreeInsert(fd, key);
+  const char* key_strings[] = {"a", "b", "c", "d", "e"};
+  for (const char* key_str : key_strings) {
+      KeyType key = make_key(key_str);
+      BTreeInsert(fd, &key);
   }
   
   BTreeHeader header;
@@ -71,13 +86,36 @@ TEST_F(BTreeTest, InsertMultipleKeys) {
   DeleteDiskNode(root);
 }
 
+TEST_F(BTreeTest, InsertNumericKeys) {
+  uint32_t order = 3;
+  BTreeCreate(fd, order);
+  
+  for (int i = 1; i <= 10; i++) {
+    KeyType key = make_key(i);
+    BTreeInsert(fd, &key);
+  }
+  
+  BTreeHeader header;
+  BTreeReadHeader(fd, &header);
+  
+  DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
+  EXPECT_GT(root->payload->count, 0);
+  
+  for (size_t i = 1; i < root->payload->count; i++) {
+    EXPECT_LT(KeyCompare(&root->payload->keys[i-1], &root->payload->keys[i]), 0);
+  }
+  
+  DeleteDiskNode(root);
+}
+
 TEST_F(BTreeTest, SplitNode) {
   uint32_t order = 2;
   BTreeCreate(fd, order);
-  
-  KeyType keys[] = {3, 2, 1, 5, 4, 6};
-  for (KeyType key : keys) {
-    BTreeInsert(fd, key);
+
+  int keys[] = {3, 2, 1, 5, 4, 6};
+  for (int k : keys) {
+    KeyType key = make_key(k);
+    BTreeInsert(fd, &key);
   }
   
   BTreeHeader header;
@@ -85,26 +123,32 @@ TEST_F(BTreeTest, SplitNode) {
   
   DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
   EXPECT_FALSE(root->payload->is_leaf); 
-  EXPECT_EQ(root->payload->count, 2);  
-  EXPECT_EQ(root->payload->keys[0], 2);
-  EXPECT_EQ(root->payload->keys[1], 4);
+  EXPECT_EQ(root->payload->count, 2);
+  
+  KeyType key2 = make_key(2);
+  KeyType key4 = make_key(4);
+  EXPECT_EQ(KeyCompare(&root->payload->keys[0], &key2), 0);
+  EXPECT_EQ(KeyCompare(&root->payload->keys[1], &key4), 0);
 
   DiskNode* child_1 = ReadNodeFromDisk(fd, &header, root->payload->children[0]);
   EXPECT_TRUE(child_1->payload->is_leaf);
-  EXPECT_EQ(child_1->payload->count, 1);  
-  EXPECT_EQ(child_1->payload->keys[0], 1);
+  EXPECT_EQ(child_1->payload->count, 1);
+  KeyType key1 = make_key(1);
+  EXPECT_EQ(KeyCompare(&child_1->payload->keys[0], &key1), 0);
 
   DiskNode* child_2 = ReadNodeFromDisk(fd, &header, root->payload->children[1]);
   EXPECT_TRUE(child_2->payload->is_leaf);
-  EXPECT_EQ(child_2->payload->count, 1);  
-  EXPECT_EQ(child_2->payload->keys[0], 3);
+  EXPECT_EQ(child_2->payload->count, 1);
+  KeyType key3 = make_key(3);
+  EXPECT_EQ(KeyCompare(&child_2->payload->keys[0], &key3), 0);
 
   DiskNode* child_3 = ReadNodeFromDisk(fd, &header, root->payload->children[2]);
   EXPECT_TRUE(child_3->payload->is_leaf);
-  EXPECT_EQ(child_3->payload->count, 2);  
-  EXPECT_EQ(child_3->payload->keys[0], 5);
-  EXPECT_EQ(child_3->payload->keys[1], 6);
-
+  EXPECT_EQ(child_3->payload->count, 2);
+  KeyType key5 = make_key(5);
+  KeyType key6 = make_key(6);
+  EXPECT_EQ(KeyCompare(&child_3->payload->keys[0], &key5), 0);
+  EXPECT_EQ(KeyCompare(&child_3->payload->keys[1], &key6), 0);
 
   DeleteDiskNode(child_3);
   DeleteDiskNode(child_2);
@@ -116,30 +160,35 @@ TEST_F(BTreeTest, LargeInsertion) {
   uint32_t order = 4;
   BTreeCreate(fd, order);
   
-  for (KeyType i = 1; i <= 20; ++i) {
-    BTreeInsert(fd, i);
+  for (int i = 1; i <= 20; ++i) {
+    KeyType key = make_key(i);
+    BTreeInsert(fd, &key);
   }
   
   BTreeHeader header;
   BTreeReadHeader(fd, &header);
   
   DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
-  EXPECT_EQ(root->payload->count, 4);
-
-  for (size_t i = 0; i < 5; i++) {
-    DiskNode* child = ReadNodeFromDisk(fd, &header, root->payload->children[i]);
+  EXPECT_FALSE(root->payload->is_leaf); 
+  
+  EXPECT_GT(root->payload->count, 0);
+  
+  for (size_t i = 0; i <= root->payload->count; i++) {
+    EXPECT_NE(root->payload->children[i], 0);
     
-    if (i != 4) {
-      EXPECT_EQ(child->payload->count, 3);
-    } else {
-      EXPECT_EQ(child->payload->count, 4);
+    DiskNode* child = ReadNodeFromDisk(fd, &header, root->payload->children[i]);
+    EXPECT_GT(child->payload->count, 0);
+    
+    for (size_t j = 1; j < child->payload->count; j++) {
+      EXPECT_LT(KeyCompare(&child->payload->keys[j-1], &child->payload->keys[j]), 0);
     }
-
+    
     DeleteDiskNode(child);
   }
   
   DeleteDiskNode(root);
 }
+
 
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);

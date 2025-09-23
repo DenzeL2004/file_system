@@ -17,7 +17,9 @@ int main() {
 	printf("Building B-Tree with order %u\n", order);
 
 	for (size_t i = 1; i <= 20; i++) {
-		BTreeInsert(fd, i);
+		KeyType key;
+		snprintf(key.data, BTREE_KEY_LEN, "%02ld", i);
+		BTreeInsert(fd, &key);
 	}
 
 	printf("\nGenerating visualization...\n");

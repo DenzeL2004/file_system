@@ -16,6 +16,14 @@ off_t GetFileSize(int fd) {
   return st.st_size;
 }
 
+int KeyCompare(const KeyType* lhs, const KeyType* rhs) {
+  return strncmp(lhs->data, rhs->data, BTREE_KEY_LEN);
+}
+
+void KeyCopy(KeyType* dst,const KeyType* src) {
+  strncpy(dst->data, src->data, BTREE_KEY_LEN);
+}
+
 BTreeNode* CreateBTreeNode(uint32_t order) {
 	BTreeNode* node = (BTreeNode*)calloc(1, sizeof(BTreeNode));
 
@@ -156,22 +164,24 @@ void BtreeSplitChildren(int fd, const BTreeHeader* header,
   DeleteDiskNode(right_child);
 }
 
-void BTreeInsertNonfull(int fd, const BTreeHeader* header, DiskNode* node, const KeyType key) {  
+void BTreeInsertNonfull(int fd, const BTreeHeader* header, DiskNode* node, const KeyType* key) {  
   int i = (int)(node->payload->count - 1);
 	
 	if (node->payload->is_leaf) {
-		while (i >= 0 && key < node->payload->keys[i]) {
+                      
+		while (i >= 0 && KeyCompare(key, &node->payload->keys[i]) < 0) {
 			node->payload->keys[i + 1] = node->payload->keys[i];
 			i--;
 		}
 
     i++;
-	
-		node->payload->keys[i] = key;
+
+    KeyCopy(&node->payload->keys[i], key);
 		node->payload->count++;
+
 		BTreeNodeWriteOnDisk(fd, header, node->payload, node->offset);
 	} else {
-		while (i >= 0 && key < node->payload->keys[i]) {
+		while (i >= 0 && KeyCompare(key, &node->payload->keys[i]) < 0) {
 			i--; 
 		}
 
@@ -179,7 +189,7 @@ void BTreeInsertNonfull(int fd, const BTreeHeader* header, DiskNode* node, const
     DiskNode* child = ReadNodeFromDisk(fd, header, node->payload->children[i]);
     if (child->payload->count == header->order * 2 - 1) {
       BtreeSplitChildren(fd, header, node, child, i);
-      if (key > node->payload->keys[i]) {
+      if (KeyCompare(key, &node->payload->keys[i]) > 0) {
         i++;
       } 
     }
@@ -193,7 +203,7 @@ void BTreeInsertNonfull(int fd, const BTreeHeader* header, DiskNode* node, const
 
 }
 
-void BTreeInsert(int fd, const KeyType key) {
+void BTreeInsert(int fd, const KeyType* key) {
 	BTreeHeader header;
 	BTreeReadHeader(fd, &header);
 
@@ -203,7 +213,7 @@ void BTreeInsert(int fd, const KeyType key) {
 
     root->payload->is_leaf = 1;
     root->payload->count = 1;
-    root->payload->keys[0] = key;
+    KeyCopy(&root->payload->keys[0], key);
 
     BTreeNodeWriteOnDisk(fd, &header, root->payload, root->offset);
 
@@ -243,7 +253,7 @@ void GenerateDotRecursive(int fd, const BTreeHeader* header,
   
   fprintf(dot_file, "  node_%ld [label=\"", (long)offset);
   for (size_t i = 0; i < node->payload->count; i++) {
-    fprintf(dot_file, "%u", node->payload->keys[i]);
+    fprintf(dot_file, "%s", node->payload->keys[i].data);
     if (i != node->payload->count - 1) {
       fprintf(dot_file, " | ");
     }
