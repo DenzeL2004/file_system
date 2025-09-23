@@ -165,6 +165,13 @@ void BtreeSplitChildren(int fd, const BTreeHeader* header,
 }
 
 void BTreeInsertNonfull(int fd, const BTreeHeader* header, DiskNode* node, const KeyType* key) {  
+
+  for (size_t i = 0; i < node->payload->count; i++) {
+    if (KeyCompare(&node->payload->keys[i], key) == 0) {
+      return;
+    }
+  }
+
   int i = (int)(node->payload->count - 1);
 	
 	if (node->payload->is_leaf) {
@@ -200,7 +207,6 @@ void BTreeInsertNonfull(int fd, const BTreeHeader* header, DiskNode* node, const
 
     DeleteDiskNode(child);
 	}
-
 }
 
 void BTreeInsert(int fd, const KeyType* key) {
@@ -222,22 +228,31 @@ void BTreeInsert(int fd, const KeyType* key) {
   else {
     DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
 
-    if (root->payload->count == header.order * 2 - 1) {
-      DiskNode* new_root = AllocateNewNodeOnDisk(fd, &header);
-      header.root_offset = new_root->offset;
-      
-      new_root->payload->is_leaf = 0;
-      new_root->payload->count = 0;
-      new_root->payload->children[0] = root->offset;
-      
-      BtreeSplitChildren(fd, &header, new_root, root, 0);
-      BTreeInsertNonfull(fd, &header, new_root, key);
-
-      DeleteDiskNode(new_root);
-    } else {
-      BTreeInsertNonfull(fd, &header, root, key);
+    uint8_t key_exist = 0;
+    for (size_t i = 0; i < root->payload->count; i++) {
+      if (KeyCompare(&root->payload->keys[i], key) == 0) {
+        key_exist = 1;
+        break;
+      }
     }
 
+    if (!key_exist) {
+      if (root->payload->count == header.order * 2 - 1) {
+        DiskNode* new_root = AllocateNewNodeOnDisk(fd, &header);
+        header.root_offset = new_root->offset;
+        
+        new_root->payload->is_leaf = 0;
+        new_root->payload->count = 0;
+        new_root->payload->children[0] = root->offset;
+        
+        BtreeSplitChildren(fd, &header, new_root, root, 0);
+        BTreeInsertNonfull(fd, &header, new_root, key);
+
+        DeleteDiskNode(new_root);
+      } else {
+        BTreeInsertNonfull(fd, &header, root, key);
+      }
+    }
     DeleteDiskNode(root);
   }
 

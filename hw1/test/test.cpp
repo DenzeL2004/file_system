@@ -189,6 +189,27 @@ TEST_F(BTreeTest, LargeInsertion) {
   DeleteDiskNode(root);
 }
 
+TEST_F(BTreeTest, InsertRepeatKey) {
+  uint32_t order = 3;
+  BTreeCreate(fd, order);
+  
+  KeyType key = make_key("test_key");
+  for (size_t i = 0; i < 10; i++) {
+    BTreeInsert(fd, &key);
+  }
+  
+  BTreeHeader header;
+  BTreeReadHeader(fd, &header);
+  EXPECT_NE(header.root_offset, 0);
+  
+  DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
+  EXPECT_TRUE(root->payload->is_leaf);
+  EXPECT_EQ(root->payload->count, 1);
+  EXPECT_EQ(KeyCompare(&root->payload->keys[0], &key), 0);
+  
+  DeleteDiskNode(root);
+}
+
 
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
