@@ -1,6 +1,2 @@
 .vscode/settings.json
 build/
-*.o
-*.dot
-*.bin
-hw1/b_tree.png

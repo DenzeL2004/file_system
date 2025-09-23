@@ -5,10 +5,13 @@
 #include <fcntl.h>
 #include <stdio.h>
 
+#define BTREE_KEY_LEN
+
 typedef uint32_t KeyType;
-typedef off_t OffsetType;
+typedef uint64_t OffsetType;
 
 typedef struct BTreeNode {
+    uint8_t is_delete;
     uint8_t is_leaf;
     size_t count;    
     KeyType* keys;
@@ -16,12 +19,12 @@ typedef struct BTreeNode {
 } BTreeNode;
 
 typedef struct DiskNode {
-    OffsetType address;
+    OffsetType offset;
     BTreeNode* payload;
 } DiskNode;
 
 typedef struct BTreeHeader {
-    OffsetType root_address;
+    OffsetType root_offset;
     uint32_t order;
 } BTreeHeader;
 

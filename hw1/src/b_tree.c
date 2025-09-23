@@ -53,7 +53,7 @@ void BTreeWriteHeader(int fd, BTreeHeader* header) {
 
 void BTreeCreate(int fd, uint32_t order) { 
   BTreeHeader header;
-  header.root_address = 0;     
+  header.root_offset = 0;     
   header.order = order;  
   
 	write(fd, &header, sizeof(BTreeHeader));
@@ -90,10 +90,10 @@ DiskNode* AllocateNewNodeOnDisk(int fd, const BTreeHeader* header) {
 
   DiskNode* node = (DiskNode*)calloc(1, sizeof(DiskNode));
 
-  node->address = GetFileSize(fd);
+  node->offset = GetFileSize(fd);
   node->payload = CreateBTreeNode(header->order);
 
-  BTreeNodeWriteOnDisk(fd, header, node->payload, node->address);
+  BTreeNodeWriteOnDisk(fd, header, node->payload, node->offset);
 
   return node;
 }
@@ -103,10 +103,10 @@ DiskNode* ReadNodeFromDisk(int fd, const BTreeHeader* header, OffsetType offset)
 
   DiskNode* node = (DiskNode*)calloc(1, sizeof(DiskNode));
 
-  node->address = offset;
+  node->offset = offset;
   node->payload = CreateBTreeNode(header->order);
 
-  BTreeNodeReadFromDisk(fd, header, node->payload, node->address);
+  BTreeNodeReadFromDisk(fd, header, node->payload, node->offset);
 
   return node;
 }
@@ -140,7 +140,7 @@ void BtreeSplitChildren(int fd, const BTreeHeader* header,
     node->payload->children[i + 1] = node->payload->children[i];
   }
 
-  node->payload->children[child_num + 1] = right_child->address;
+  node->payload->children[child_num + 1] = right_child->offset;
   
   for (int i = (int)node->payload->count - 1; i >= child_num; i--) {
     node->payload->keys[i + 1] = node->payload->keys[i];
@@ -149,9 +149,9 @@ void BtreeSplitChildren(int fd, const BTreeHeader* header,
   
   node->payload->count++;
   
-  BTreeNodeWriteOnDisk(fd, header, node->payload, node->address);
-  BTreeNodeWriteOnDisk(fd, header, left_child->payload, left_child->address);
-  BTreeNodeWriteOnDisk(fd, header, right_child->payload, right_child->address);
+  BTreeNodeWriteOnDisk(fd, header, node->payload, node->offset);
+  BTreeNodeWriteOnDisk(fd, header, left_child->payload, left_child->offset);
+  BTreeNodeWriteOnDisk(fd, header, right_child->payload, right_child->offset);
 
   DeleteDiskNode(right_child);
 }
@@ -169,7 +169,7 @@ void BTreeInsertNonfull(int fd, const BTreeHeader* header, DiskNode* node, const
 	
 		node->payload->keys[i] = key;
 		node->payload->count++;
-		BTreeNodeWriteOnDisk(fd, header, node->payload, node->address);
+		BTreeNodeWriteOnDisk(fd, header, node->payload, node->offset);
 	} else {
 		while (i >= 0 && key < node->payload->keys[i]) {
 			i--; 
@@ -184,8 +184,8 @@ void BTreeInsertNonfull(int fd, const BTreeHeader* header, DiskNode* node, const
       } 
     }
 
-    child->address = node->payload->children[i];
-    BTreeNodeReadFromDisk(fd, header, child->payload, child->address);
+    child->offset = node->payload->children[i];
+    BTreeNodeReadFromDisk(fd, header, child->payload, child->offset);
     BTreeInsertNonfull(fd, header, child, key);
 
     DeleteDiskNode(child);
@@ -197,28 +197,28 @@ void BTreeInsert(int fd, const KeyType key) {
 	BTreeHeader header;
 	BTreeReadHeader(fd, &header);
 
-  if (header.root_address == 0) {
+  if (header.root_offset == 0) {
     DiskNode* root = AllocateNewNodeOnDisk(fd, &header);
-    header.root_address = root->address;
+    header.root_offset = root->offset;
 
     root->payload->is_leaf = 1;
     root->payload->count = 1;
     root->payload->keys[0] = key;
 
-    BTreeNodeWriteOnDisk(fd, &header, root->payload, root->address);
+    BTreeNodeWriteOnDisk(fd, &header, root->payload, root->offset);
 
     DeleteDiskNode(root);
   }
   else {
-    DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_address);
+    DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
 
     if (root->payload->count == header.order * 2 - 1) {
       DiskNode* new_root = AllocateNewNodeOnDisk(fd, &header);
-      header.root_address = new_root->address;
+      header.root_offset = new_root->offset;
       
       new_root->payload->is_leaf = 0;
       new_root->payload->count = 0;
-      new_root->payload->children[0] = root->address;
+      new_root->payload->children[0] = root->offset;
       
       BtreeSplitChildren(fd, &header, new_root, root, 0);
       BTreeInsertNonfull(fd, &header, new_root, key);
@@ -270,7 +270,7 @@ void BTreeVisualize(int fd, const char* dot_filename, const char* png_filename) 
   BTreeHeader header;
   BTreeReadHeader(fd, &header);
   
-  if (header.root_address == 0) {
+  if (header.root_offset == 0) {
     printf("Tree is empty\n");
     return;
   }
@@ -284,7 +284,7 @@ void BTreeVisualize(int fd, const char* dot_filename, const char* png_filename) 
   fprintf(dot_file, "digraph BTree {\n");
   fprintf(dot_file, "  node [shape=record, height=.1];\n");
   
-  GenerateDotRecursive(fd, &header, header.root_address, dot_file);
+  GenerateDotRecursive(fd, &header, header.root_offset, dot_file);
   
   fprintf(dot_file, "}\n");
   fclose(dot_file);

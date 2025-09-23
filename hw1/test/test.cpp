@@ -31,7 +31,7 @@ TEST_F(BTreeTest, CreateBTree) {
   BTreeReadHeader(fd, &header);
   
   EXPECT_EQ(header.order, order);
-  EXPECT_EQ(header.root_address, 0);
+  EXPECT_EQ(header.root_offset, 0);
 }
 
 TEST_F(BTreeTest, InsertSingleKey) {
@@ -43,9 +43,9 @@ TEST_F(BTreeTest, InsertSingleKey) {
   
   BTreeHeader header;
   BTreeReadHeader(fd, &header);
-  EXPECT_NE(header.root_address, 0);
+  EXPECT_NE(header.root_offset, 0);
   
-  DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_address);
+  DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
   EXPECT_TRUE(root->payload->is_leaf);
   EXPECT_EQ(root->payload->count, 1);
   EXPECT_EQ(root->payload->keys[0], key);
@@ -65,7 +65,7 @@ TEST_F(BTreeTest, InsertMultipleKeys) {
   BTreeHeader header;
   BTreeReadHeader(fd, &header);
   
-  DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_address);
+  DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
   EXPECT_GT(root->payload->count, 0);
   
   DeleteDiskNode(root);
@@ -83,7 +83,7 @@ TEST_F(BTreeTest, SplitNode) {
   BTreeHeader header;
   BTreeReadHeader(fd, &header);
   
-  DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_address);
+  DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
   EXPECT_FALSE(root->payload->is_leaf); 
   EXPECT_EQ(root->payload->count, 2);  
   EXPECT_EQ(root->payload->keys[0], 2);
@@ -123,7 +123,7 @@ TEST_F(BTreeTest, LargeInsertion) {
   BTreeHeader header;
   BTreeReadHeader(fd, &header);
   
-  DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_address);
+  DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
   EXPECT_EQ(root->payload->count, 4);
 
   for (size_t i = 0; i < 5; i++) {
