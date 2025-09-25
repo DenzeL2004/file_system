@@ -97,6 +97,9 @@ TEST_F(BTreeTest, InsertNumericKeys) {
   
   BTreeHeader header;
   BTreeReadHeader(fd, &header);
+
+  EXPECT_NE(header.root_offset, 0);
+  EXPECT_EQ(header.key_count, 10);
   
   DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
   EXPECT_GT(root->payload->count, 0);
@@ -120,7 +123,9 @@ TEST_F(BTreeTest, SplitNode) {
   
   BTreeHeader header;
   BTreeReadHeader(fd, &header);
-  
+  EXPECT_NE(header.root_offset, 0);
+  EXPECT_EQ(header.key_count, 6);
+
   DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
   EXPECT_FALSE(root->payload->is_leaf); 
   EXPECT_EQ(root->payload->count, 2);
@@ -167,6 +172,8 @@ TEST_F(BTreeTest, LargeInsertion) {
   
   BTreeHeader header;
   BTreeReadHeader(fd, &header);
+  EXPECT_NE(header.root_offset, 0);
+  EXPECT_EQ(header.key_count, 20);
   
   DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
   EXPECT_FALSE(root->payload->is_leaf); 
@@ -201,6 +208,7 @@ TEST_F(BTreeTest, InsertRepeatKey) {
   BTreeHeader header;
   BTreeReadHeader(fd, &header);
   EXPECT_NE(header.root_offset, 0);
+  EXPECT_EQ(header.key_count, 1);
   
   DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
   EXPECT_TRUE(root->payload->is_leaf);
@@ -231,6 +239,7 @@ TEST_F(BTreeTest, FindInSimpleTree) {
   BTreeHeader header;
   BTreeReadHeader(fd, &header);
   EXPECT_NE(header.root_offset, 0);
+  EXPECT_EQ(header.key_count, 3);
 
   DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
 
@@ -255,6 +264,7 @@ TEST_F(BTreeTest, FindInTree) {
   BTreeHeader header;
   BTreeReadHeader(fd, &header);
   EXPECT_NE(header.root_offset, 0);
+  EXPECT_EQ(header.key_count, 9);
 
   DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
 

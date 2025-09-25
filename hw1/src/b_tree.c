@@ -31,7 +31,8 @@ BTreeNode* CreateBTreeNode(uint32_t order) {
 	node->count = 0;
 	
 	node->keys = (KeyType*)calloc(2 * order - 1, sizeof(KeyType));
-	node->children = (OffsetType*)calloc(2 * order, sizeof(OffsetType));
+	node->is_delete = (uint8_t*)calloc(2 * order, sizeof(uint16_t));
+  node->children = (OffsetType*)calloc(2 * order, sizeof(OffsetType));
 
 	return node;
 }
@@ -39,8 +40,9 @@ BTreeNode* CreateBTreeNode(uint32_t order) {
 void DeleteBTreeNode(BTreeNode* node) { 
 	assert(node != NULL);
 
-	free(node->children);
 	free(node->keys);
+	free(node->is_delete);
+  free(node->children);
 
 	free(node);
 }
@@ -61,8 +63,10 @@ void BTreeWriteHeader(int fd, BTreeHeader* header) {
 
 void BTreeCreate(int fd, uint32_t order) { 
   BTreeHeader header;
+
   header.root_offset = 0;     
   header.order = order;  
+  header.key_count = 0;
   
 	write(fd, &header, sizeof(BTreeHeader));
 }
@@ -77,6 +81,7 @@ void BTreeNodeWriteOnDisk(int fd, const BTreeHeader* header, const BTreeNode* no
 	write(fd, &node->count, sizeof(node->count));
 
  	write(fd, node->keys, (header->order * 2 - 1) * sizeof(KeyType));
+  write(fd, node->is_delete, (header->order * 2 - 1) * sizeof(uint8_t));
 	write(fd, node->children, (header->order * 2) * sizeof(OffsetType));
 }
 
@@ -90,6 +95,7 @@ void BTreeNodeReadFromDisk(int fd, const BTreeHeader* header, BTreeNode* node, O
 	read(fd, &node->count, sizeof(node->count));
 
 	read(fd, node->keys, (header->order * 2 - 1) * sizeof(KeyType));
+  read(fd, node->is_delete, (header->order * 2 - 1) * sizeof(uint8_t));
 	read(fd, node->children, (header->order * 2) * sizeof(OffsetType));
 }
 
@@ -164,7 +170,7 @@ void BtreeSplitChildren(int fd, const BTreeHeader* header,
   DeleteDiskNode(right_child);
 }
 
-void BTreeInsertNonfull(int fd, const BTreeHeader* header, DiskNode* node, const KeyType* key) {  
+void BTreeInsertNonfull(int fd, BTreeHeader* header, DiskNode* node, const KeyType* key) {  
 
   for (size_t i = 0; i < node->payload->count; i++) {
     if (KeyCompare(&node->payload->keys[i], key) == 0) {
@@ -184,6 +190,7 @@ void BTreeInsertNonfull(int fd, const BTreeHeader* header, DiskNode* node, const
     i++;
 
     KeyCopy(&node->payload->keys[i], key);
+    header->key_count++;
 		node->payload->count++;
 
 		BTreeNodeWriteOnDisk(fd, header, node->payload, node->offset);
@@ -216,6 +223,7 @@ void BTreeInsert(int fd, const KeyType* key) {
   if (header.root_offset == 0) {
     DiskNode* root = AllocateNewNodeOnDisk(fd, &header);
     header.root_offset = root->offset;
+    header.key_count = 1;
 
     root->payload->is_leaf = 1;
     root->payload->count = 1;

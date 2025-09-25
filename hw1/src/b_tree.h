@@ -14,10 +14,10 @@ typedef struct KeyType {
 } KeyType;
 
 typedef struct BTreeNode {
-	uint8_t is_delete;
 	uint8_t is_leaf;
 	size_t count;    
 	KeyType* keys;
+	uint8_t* is_delete;
 	OffsetType* children;
 } BTreeNode;
 
@@ -29,6 +29,7 @@ typedef struct DiskNode {
 typedef struct BTreeHeader {
 	OffsetType root_offset;
 	uint32_t order;
+	size_t key_count;
 } BTreeHeader;
 
 int KeyCompare(const KeyType* lhs, const KeyType* rhs);
