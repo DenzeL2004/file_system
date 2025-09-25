@@ -444,39 +444,40 @@ void BTreeVisualize(int fd, const char* dot_filename, const char* png_filename) 
   }
 }
 
-void BTreeGetKeysFromNode(int fd, const BTreeHeader* header, const DiskNode* node, KeyType* keys, size_t* pos) {
-  for (size_t i = 0; i < node->payload->count; i++){
+size_t BTreeGetKeysFromNode(int fd, const BTreeHeader* header,
+                           const DiskNode* node, KeyType* keys, size_t start_pos) {
+  size_t pos = start_pos;
+  
+  for (size_t i = 0; i <= node->payload->count; i++) {
+
     if (!node->payload->is_leaf) {
       DiskNode* child = ReadNodeFromDisk(fd, header, node->payload->children[i]);
-      BTreeGetKeysFromNode(fd, header, child, keys, pos);
+      pos = BTreeGetKeysFromNode(fd, header, child, keys, pos);
       DeleteDiskNode(child);
     }
-
-    if (node->payload->is_delete[i]) 
-      continue;
-
-    KeyCopy(&keys[*pos], &node->payload->keys[i]);
-    *pos = *pos + 1;
+    
+    if (i < node->payload->count && !node->payload->is_delete[i]) {
+      KeyCopy(&keys[pos], &node->payload->keys[i]);
+      pos++;
+    }
   }
-
-  if (!node->payload->is_leaf) {
-    DiskNode* child = ReadNodeFromDisk(fd, header, node->payload->children[node->payload->count]);
-    BTreeGetKeysFromNode(fd, header, child, keys, pos);
-    DeleteDiskNode(child);
-  }
+  
+  return pos;
 }
 
-void BTreeGetAllKeys(int fd, const BTreeHeader* header, KeyType* keys) {
-  if (header->root_offset == 0) {
-    return;
+size_t BTreeGetAllKeys(int fd, KeyType* keys) {
+  BTreeHeader header;
+  BTreeReadHeader(fd, &header);
+  
+  if (header.root_offset == 0) {
+      return 0;
   }
 
-  DiskNode* root = ReadNodeFromDisk(fd, header, header->root_offset);
-
-  size_t pos = 0;
-  BTreeGetKeysFromNode(fd, header, root, keys, &pos);
-
+  DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
+  size_t count = BTreeGetKeysFromNode(fd, &header, root, keys, 0);
   DeleteDiskNode(root);
+  
+  return count;
 }
 
 void BTreeConstructBySortedList(int fd, BTreeHeader* header, const KeyType* keys) {
@@ -573,6 +574,8 @@ void BTreeConstructBySortedList(int fd, BTreeHeader* header, const KeyType* keys
   header->root_offset = root->offset;
   BTreeWriteHeader(fd, header);
 
+  // printf("%lu, %lu %lu %lu %lu\n", root->payload->count, root->payload->children[0], root->payload->children[1], root->payload->children[2], root->payload->children[3]);
+
   BTreeNodeWriteOnDisk(fd, header, root->payload, root->offset);
   DeleteDiskNode(root);
 
@@ -585,13 +588,13 @@ void BTreeMerge(int lhs_fd, int rhs_fd, int dst_fd, size_t dst_order) {
   BTreeReadHeader(lhs_fd, &lhs_header);
 
   KeyType* lhs_keys = (KeyType*)calloc(lhs_header.key_count, sizeof(KeyType));
-  BTreeGetAllKeys(lhs_fd, &lhs_header, lhs_keys);
+  BTreeGetAllKeys(lhs_fd, lhs_keys);
 
   BTreeHeader rhs_header;
   BTreeReadHeader(rhs_fd, &rhs_header);
 
   KeyType* rhs_keys = (KeyType*)calloc(rhs_header.key_count, sizeof(KeyType));
-  BTreeGetAllKeys(rhs_fd, &rhs_header, rhs_keys);
+  BTreeGetAllKeys(rhs_fd, rhs_keys);
 
   BTreeHeader dst_header;
   dst_header.order = dst_order;

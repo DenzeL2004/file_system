@@ -37,7 +37,7 @@ int main() {
 
 	printf("Building B-Tree with order %u\n", order_2);
 
-	for (size_t i = 11; i <= 99; i++) {
+	for (size_t i = 11; i <= 19; i++) {
 		KeyType key;
 		snprintf(key.data, BTREE_KEY_LEN, "%02ld", i);
 		BTreeInsert(fd_2, &key);

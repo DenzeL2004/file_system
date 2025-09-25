@@ -315,7 +315,6 @@ TEST_F(BTreeTest, DeleteInTree) {
 
 }
 
-
 TEST_F(BTreeTest, DeleteMany) {
   uint32_t order = 4;
   BTreeCreate(fd, order);
@@ -339,6 +338,78 @@ TEST_F(BTreeTest, DeleteMany) {
 
   BTreeReadHeader(fd, &header);
   EXPECT_EQ(header.key_count, kMaxCount - keys.size());
+}
+
+TEST_F(BTreeTest, MergeEmptyTrees) {
+  int lhs_fd = open("lhs_tree.bin", O_RDWR | O_CREAT | O_TRUNC, 0644);
+  int rhs_fd = open("rhs_tree.bin", O_RDWR | O_CREAT | O_TRUNC, 0644);
+  int dst_fd = open("dst_tree.bin", O_RDWR | O_CREAT | O_TRUNC, 0644);
+  
+  ASSERT_NE(lhs_fd, -1);
+  ASSERT_NE(rhs_fd, -1);
+  ASSERT_NE(dst_fd, -1);
+  
+  BTreeCreate(lhs_fd, 3);
+  BTreeCreate(rhs_fd, 3);
+  
+  BTreeMerge(lhs_fd, rhs_fd, dst_fd, 3);
+  
+  BTreeHeader dst_header;
+  BTreeReadHeader(dst_fd, &dst_header);
+  
+  EXPECT_EQ(dst_header.key_count, 0);
+  EXPECT_EQ(dst_header.root_offset, 0);
+  EXPECT_EQ(dst_header.order, 3);
+  
+  KeyType test_key = make_key("test");
+  EXPECT_EQ(BTreeFind(dst_fd, &test_key), 0);
+  
+  close(lhs_fd);
+  close(rhs_fd);
+  close(dst_fd);
+  
+  remove("lhs_tree.bin");
+  remove("rhs_tree.bin");
+  remove("dst_tree.bin");
+}
+
+TEST_F(BTreeTest, MergeNonEmptyTreesWithDuplicates) {
+  int lhs_fd = open("lhs_tree.bin", O_RDWR | O_CREAT | O_TRUNC, 0644);
+  int rhs_fd = open("rhs_tree.bin", O_RDWR | O_CREAT | O_TRUNC, 0644);
+  int dst_fd = open("dst_tree.bin", O_RDWR | O_CREAT | O_TRUNC, 0644);
+  
+  ASSERT_NE(lhs_fd, -1);
+  ASSERT_NE(rhs_fd, -1);
+  ASSERT_NE(dst_fd, -1);
+  
+  BTreeCreate(lhs_fd, 3);
+  KeyType lhs_keys[] = {make_key("apple"), make_key("banana"), make_key("cherry")};
+  for (const auto& key : lhs_keys) {
+    BTreeInsert(lhs_fd, &key);
+  }
+  
+  BTreeCreate(rhs_fd, 3);
+  KeyType rhs_keys[] = {make_key("banana"), make_key("date"), make_key("elderberry")};
+  for (const auto& key : rhs_keys) {
+    BTreeInsert(rhs_fd, &key);
+  }
+  
+  BTreeMerge(lhs_fd, rhs_fd, dst_fd, 3);
+  
+  BTreeHeader dst_header;
+  BTreeReadHeader(dst_fd, &dst_header);
+  
+  EXPECT_EQ(dst_header.key_count, 5);
+  EXPECT_NE(dst_header.root_offset, 0);
+  EXPECT_EQ(dst_header.order, 3);
+  
+  close(lhs_fd);
+  close(rhs_fd);
+  close(dst_fd);
+  
+  remove("lhs_tree.bin");
+  remove("rhs_tree.bin");
+  remove("dst_tree.bin");
 }
 
 int main(int argc, char **argv) {
