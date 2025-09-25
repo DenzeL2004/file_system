@@ -170,12 +170,27 @@ void BtreeSplitChildren(int fd, const BTreeHeader* header,
   DeleteDiskNode(right_child);
 }
 
-void BTreeInsertNonfull(int fd, BTreeHeader* header, DiskNode* node, const KeyType* key) {  
-
+size_t FindKeyIndex(const DiskNode* node, const KeyType* key) {
   for (size_t i = 0; i < node->payload->count; i++) {
     if (KeyCompare(&node->payload->keys[i], key) == 0) {
-      return;
+      return i;
     }
+  }
+
+  return -1;
+}
+
+void BTreeInsertNonfull(int fd, BTreeHeader* header, DiskNode* node, const KeyType* key) {  
+
+  size_t key_index = FindKeyIndex(node, key);
+  if (key_index != -1) {
+    if (node->payload->is_delete[key_index]) {
+      header->key_count++;
+    }
+    
+    node->payload->is_delete[key_index] = 0;
+    BTreeNodeWriteOnDisk(fd, header, node->payload, node->offset);
+    return;
   }
 
   int i = (int)(node->payload->count - 1);
@@ -236,15 +251,16 @@ void BTreeInsert(int fd, const KeyType* key) {
   else {
     DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
 
-    uint8_t key_exist = 0;
-    for (size_t i = 0; i < root->payload->count; i++) {
-      if (KeyCompare(&root->payload->keys[i], key) == 0) {
-        key_exist = 1;
-        break;
-      }
-    }
+    size_t key_index = FindKeyIndex(root, key);
+    if (key_index != -1) {
 
-    if (!key_exist) {
+      if (root->payload->is_delete[key_index]) {
+        header.key_count++;
+      }
+
+      root->payload->is_delete[key_index] = 0;
+      BTreeNodeWriteOnDisk(fd, &header, root->payload, root->offset);
+    } else {
       if (root->payload->count == header.order * 2 - 1) {
         DiskNode* new_root = AllocateNewNodeOnDisk(fd, &header);
         header.root_offset = new_root->offset;
@@ -277,7 +293,11 @@ OffsetType BTreeFindNode(int fd, const BTreeHeader* header, DiskNode* node, cons
   }
 
   if (i != -1 && cmp_res == 0) {
-    return node->offset;
+    if (node->payload->is_delete[i]) {
+      return 0;
+    } else {
+      return node->offset;
+    }
   }
 
   if (node->payload->is_leaf) {
@@ -310,6 +330,52 @@ OffsetType BTreeFind(int fd, const KeyType* key) {
   DeleteDiskNode(root);
 
   return offset;
+}
+
+void BTreeNodeDeleteKey(int fd, BTreeHeader* header, DiskNode* node, const KeyType* key) {
+
+  int i = (int)(node->payload->count - 1);
+
+  int cmp_res = -1;
+  while (i >= 0 && (cmp_res = KeyCompare(key, &node->payload->keys[i])) < 0) {
+    i--;
+  }
+
+  if (i != -1 && cmp_res == 0) {
+    node->payload->is_delete[i] = 1;
+    header->key_count--;
+    BTreeNodeWriteOnDisk(fd, header, node->payload, node->offset);
+    return;
+  }
+
+  if (node->payload->is_leaf) {
+    return;
+  }
+
+  i++;
+
+  DiskNode* child = ReadNodeFromDisk(fd, header, node->payload->children[i]);
+
+  BTreeNodeDeleteKey(fd, header, child, key);
+
+  DeleteDiskNode(child);
+}
+
+void BTreeDeleteKey(int fd, const KeyType* key) {
+	BTreeHeader header;
+	BTreeReadHeader(fd, &header);
+
+  if (header.root_offset == 0) {
+    return;
+  }
+  
+  DiskNode* root = ReadNodeFromDisk(fd, &header, header.root_offset);
+
+  BTreeNodeDeleteKey(fd, &header, root, key);
+
+  DeleteDiskNode(root);
+
+  BTreeWriteHeader(fd, &header); 
 }
 
 void GenerateDotRecursive(int fd, const BTreeHeader* header, 

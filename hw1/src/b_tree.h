@@ -37,6 +37,7 @@ void KeyCopy(KeyType* dst,const KeyType* src);
 
 void BTreeCreate(int fd, uint32_t order);
 void BTreeInsert(int fd, const KeyType* key);
+void BTreeDeleteKey(int fd, const KeyType* key);
 OffsetType BTreeFind(int fd, const KeyType* key);
 
 BTreeNode* CreateBTreeNode(uint32_t order);

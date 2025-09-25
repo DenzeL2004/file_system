@@ -283,6 +283,63 @@ TEST_F(BTreeTest, FindInTree) {
   DeleteDiskNode(root);
 }
 
+TEST_F(BTreeTest, DeleteInTree) {
+  uint32_t order = 4;
+  BTreeCreate(fd, order);
+  
+  const size_t kMaxCount = 20;
+  for (int i = 1; i <= kMaxCount; ++i) {
+    KeyType key = make_key(i);
+    BTreeInsert(fd, &key);
+  }
+
+  BTreeHeader header;
+  BTreeReadHeader(fd, &header);
+  EXPECT_NE(header.root_offset, 0);
+  EXPECT_EQ(header.key_count, kMaxCount);
+
+  KeyType key = make_key(1);
+  EXPECT_NE(BTreeFind(fd, &key), 0);
+
+  BTreeDeleteKey(fd, &key);
+  EXPECT_EQ(BTreeFind(fd, &key), 0);
+  
+  BTreeReadHeader(fd, &header);
+  EXPECT_EQ(header.key_count, kMaxCount - 1);
+
+  BTreeInsert(fd, &key);
+  EXPECT_NE(BTreeFind(fd, &key), 0);
+
+  BTreeReadHeader(fd, &header);
+  EXPECT_EQ(header.key_count, kMaxCount);
+
+}
+
+
+TEST_F(BTreeTest, DeleteMany) {
+  uint32_t order = 4;
+  BTreeCreate(fd, order);
+  
+  const size_t kMaxCount = 20;
+  for (int i = 1; i <= kMaxCount; ++i) {
+    KeyType key = make_key(i);
+    BTreeInsert(fd, &key);
+  }
+
+  BTreeHeader header;
+  BTreeReadHeader(fd, &header);
+  EXPECT_NE(header.root_offset, 0);
+  EXPECT_EQ(header.key_count, kMaxCount);
+
+  std::vector<int> keys = {1, 4, 7, 10, 13, 16};
+  for (auto& k : keys) {
+    KeyType key = make_key(k);
+    BTreeDeleteKey(fd, &key);
+  }
+
+  BTreeReadHeader(fd, &header);
+  EXPECT_EQ(header.key_count, kMaxCount - keys.size());
+}
 
 int main(int argc, char **argv) {
   ::testing::InitGoogleTest(&argc, argv);
