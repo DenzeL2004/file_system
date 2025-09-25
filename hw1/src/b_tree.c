@@ -7,6 +7,8 @@
 #include <assert.h>
 #include <sys/stat.h>
 
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+
 off_t GetFileSize(int fd) {
   struct stat st;
   if (fstat(fd, &st) == -1) {
@@ -407,6 +409,7 @@ void GenerateDotRecursive(int fd, const BTreeHeader* header,
   DeleteDiskNode(node);
 }
 
+
 void BTreeVisualize(int fd, const char* dot_filename, const char* png_filename) {
   assert(dot_filename != NULL);
   assert(png_filename != NULL);
@@ -439,4 +442,202 @@ void BTreeVisualize(int fd, const char* dot_filename, const char* png_filename) 
     system(command);
     printf("Visualization created: %s -> %s\n", dot_filename, png_filename);
   }
+}
+
+void BTreeGetKeysFromNode(int fd, const BTreeHeader* header, const DiskNode* node, KeyType* keys, size_t* pos) {
+  for (size_t i = 0; i < node->payload->count; i++){
+    if (!node->payload->is_leaf) {
+      DiskNode* child = ReadNodeFromDisk(fd, header, node->payload->children[i]);
+      BTreeGetKeysFromNode(fd, header, child, keys, pos);
+      DeleteDiskNode(child);
+    }
+
+    if (node->payload->is_delete[i]) 
+      continue;
+
+    KeyCopy(&keys[*pos], &node->payload->keys[i]);
+    *pos = *pos + 1;
+  }
+
+  if (!node->payload->is_leaf) {
+    DiskNode* child = ReadNodeFromDisk(fd, header, node->payload->children[node->payload->count]);
+    BTreeGetKeysFromNode(fd, header, child, keys, pos);
+    DeleteDiskNode(child);
+  }
+}
+
+void BTreeGetAllKeys(int fd, const BTreeHeader* header, KeyType* keys) {
+  if (header->root_offset == 0) {
+    return;
+  }
+
+  DiskNode* root = ReadNodeFromDisk(fd, header, header->root_offset);
+
+  size_t pos = 0;
+  BTreeGetKeysFromNode(fd, header, root, keys, &pos);
+
+  DeleteDiskNode(root);
+}
+
+void BTreeConstructBySortedList(int fd, BTreeHeader* header, const KeyType* keys) {
+  if (header->key_count == 0) {
+    header->root_offset = 0;
+    BTreeWriteHeader(fd, header);
+    return;
+  }
+
+  const size_t max_keys_per_node = 2 * header->order - 1;
+  const size_t min_keys_per_node = header->order - 1;
+
+  KeyType* cur_level_keys = (KeyType*)calloc(header->key_count, sizeof(KeyType));
+  memcpy(cur_level_keys, keys, sizeof(KeyType) * header->key_count);
+
+  OffsetType* prev_level_nodes_offsets = (OffsetType*)calloc(header->key_count, sizeof(OffsetType));
+  size_t prev_level_nodes_count = 0;
+
+  size_t level = 0;
+  size_t cur_keys_on_level = header->key_count;
+
+  while (cur_keys_on_level > max_keys_per_node) {
+    size_t level_nodes_count = 0;
+    OffsetType* cur_level_nodes_offsets = (OffsetType*)calloc(header->key_count, sizeof(OffsetType));
+
+    size_t offset_index = 0;
+    size_t next_level_keys_count = 0;
+    size_t key_index = 0;
+
+    while (key_index + min_keys_per_node <= cur_keys_on_level) {
+      DiskNode* node = AllocateNewNodeOnDisk(fd, header);
+      if (level == 0) {
+        node->payload->is_leaf = 1;
+      }
+
+      cur_level_nodes_offsets[level_nodes_count] = node->offset;
+
+      size_t node_keys_count = MIN(max_keys_per_node, cur_keys_on_level - key_index);
+
+      memcpy(node->payload->keys, cur_level_keys + key_index, node_keys_count * sizeof(KeyType));
+      node->payload->count = node_keys_count;
+
+      key_index += node_keys_count;
+      if (key_index + 1 <= cur_keys_on_level) {
+        KeyCopy(&cur_level_keys[next_level_keys_count], &cur_level_keys[key_index]);
+        key_index++;
+        next_level_keys_count++;
+      }
+
+      size_t i = 0;
+      while (offset_index < prev_level_nodes_count && i <= max_keys_per_node) {
+        node->payload->children[i] = prev_level_nodes_offsets[offset_index];
+        i++;
+        offset_index++;
+      }
+
+      level_nodes_count++;
+
+      BTreeNodeWriteOnDisk(fd, header, node->payload, node->offset);
+      DeleteDiskNode(node);
+    }
+
+    while (key_index < cur_keys_on_level) {
+      KeyCopy(&cur_level_keys[next_level_keys_count], &cur_level_keys[key_index]);
+      key_index++;
+      next_level_keys_count++;
+    }
+    
+
+    for (size_t i = 0; i < level_nodes_count; i++) {
+      prev_level_nodes_offsets[i] = cur_level_nodes_offsets[i];
+    }
+    prev_level_nodes_count = level_nodes_count;
+    
+    free(cur_level_nodes_offsets);
+
+    level++;
+    cur_keys_on_level = next_level_keys_count;
+  }
+
+  // Root 
+
+  DiskNode* root = AllocateNewNodeOnDisk(fd, header);
+  if (level == 0) {
+    root->payload->is_leaf = 1;
+  }
+
+  memcpy(root->payload->keys, cur_level_keys, cur_keys_on_level * sizeof(KeyType));
+  root->payload->count = cur_keys_on_level;
+
+  size_t i = 0;
+  memcpy(root->payload->children, prev_level_nodes_offsets, prev_level_nodes_count * sizeof(OffsetType));
+  
+  header->root_offset = root->offset;
+  BTreeWriteHeader(fd, header);
+
+  BTreeNodeWriteOnDisk(fd, header, root->payload, root->offset);
+  DeleteDiskNode(root);
+
+  free(prev_level_nodes_offsets);
+  free(cur_level_keys);
+}
+
+void BTreeMerge(int lhs_fd, int rhs_fd, int dst_fd, size_t dst_order) {
+  BTreeHeader lhs_header;
+  BTreeReadHeader(lhs_fd, &lhs_header);
+
+  KeyType* lhs_keys = (KeyType*)calloc(lhs_header.key_count, sizeof(KeyType));
+  BTreeGetAllKeys(lhs_fd, &lhs_header, lhs_keys);
+
+  BTreeHeader rhs_header;
+  BTreeReadHeader(rhs_fd, &rhs_header);
+
+  KeyType* rhs_keys = (KeyType*)calloc(rhs_header.key_count, sizeof(KeyType));
+  BTreeGetAllKeys(rhs_fd, &rhs_header, rhs_keys);
+
+  BTreeHeader dst_header;
+  dst_header.order = dst_order;
+
+  KeyType* keys = (KeyType*)calloc(lhs_header.key_count + rhs_header.key_count, sizeof(KeyType));
+
+  size_t i = 0, j = 0, k = 0;
+  while (i < lhs_header.key_count && j < rhs_header.key_count) {
+    int cmp = KeyCompare(&lhs_keys[i], &rhs_keys[j]);
+    
+    if (cmp < 0) {
+      KeyCopy(&keys[k], &lhs_keys[i]);
+      i++;
+    } else if (cmp > 0) {
+      KeyCopy(&keys[k], &rhs_keys[j]);
+      j++;
+    } else {
+      KeyCopy(&keys[k], &lhs_keys[i]);
+      i++;
+      j++;
+    }
+    k++;
+  }
+
+  while (i < lhs_header.key_count) {
+    KeyCopy(&keys[k], &lhs_keys[i]);
+    k++;
+    i++;
+  }
+
+  while (j < rhs_header.key_count) {
+    KeyCopy(&keys[k], &rhs_keys[j]);
+    k++;
+    j++;
+  }
+
+  dst_header.key_count = k;
+
+  // for (size_t ii = 0; ii < k; ii++) {
+  //   printf("%s ", keys[ii].data);
+  // }
+
+  BTreeCreate(dst_fd, dst_order);
+  BTreeConstructBySortedList(dst_fd, &dst_header, keys);
+
+  free(lhs_keys);
+  free(rhs_keys);
+  free(keys);
 }

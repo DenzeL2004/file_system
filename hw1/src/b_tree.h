@@ -40,6 +40,8 @@ void BTreeInsert(int fd, const KeyType* key);
 void BTreeDeleteKey(int fd, const KeyType* key);
 OffsetType BTreeFind(int fd, const KeyType* key);
 
+void BTreeMerge(int lhs_fd, int rhs_fd, int dst_fd, size_t dst_order);
+
 BTreeNode* CreateBTreeNode(uint32_t order);
 void DeleteBTreeNode(BTreeNode* node);
 
