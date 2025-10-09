@@ -33,7 +33,7 @@ BTreeNode* CreateBTreeNode(uint32_t order) {
 	node->count = 0;
 	
 	node->keys = (KeyType*)calloc(2 * order - 1, sizeof(KeyType));
-	node->is_delete = (uint8_t*)calloc(2 * order, sizeof(uint16_t));
+	node->is_delete = (uint8_t*)calloc(2 * order, sizeof(uint8_t));
   node->children = (OffsetType*)calloc(2 * order, sizeof(OffsetType));
 
 	return node;
