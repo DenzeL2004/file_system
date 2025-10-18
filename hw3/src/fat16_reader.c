@@ -15,13 +15,15 @@
 #define DIR_ENTRY_ENRTY_SIZE 32
 #define DELETE_FILE_FLAG 0xe5
 #define LFN_ATTR 0x0f
+#define CLUSTER_END_FLAG 0xffff
 
 typedef struct {
-    uint32_t root_dir_address;
-    uint32_t data_area_start;
-    uint32_t cluster_size;
-    uint16_t bytes_per_sector;
-    uint8_t sectors_per_cluster;
+  uint32_t root_dir_address;
+  uint32_t data_area_start;
+  uint32_t cluster_size;
+  uint16_t bytes_per_sector;
+  uint8_t sectors_per_cluster;
+  uint32_t fat_address;
 } Fat16Layout;
 
 void ReverseString(char* str, size_t len) {
@@ -44,19 +46,22 @@ Fat16Layout GetFat16Layout(int fat_img) {
 
   int res = read(fat_img, buffer, SECTOR_SIZE);
   if (res == -1) {
-    layout.root_dir_address = -1;
-    return layout;
+      layout.root_dir_address = -1;
+      return layout;
   }
 
   layout.bytes_per_sector = (buffer[12] << 8) | buffer[11];
   layout.sectors_per_cluster = buffer[13];
+  
   uint16_t reserved_sectors = (buffer[15] << 8) | buffer[14];
   uint8_t fat_count = buffer[16];
   uint16_t root_entries = (buffer[18] << 8) | buffer[17];
   uint16_t sectors_per_fat = (buffer[23] << 8) | buffer[22];
   
-  layout.root_dir_address = (reserved_sectors + (fat_count * sectors_per_fat)) * layout.bytes_per_sector;
-  layout.data_area_start = layout.root_dir_address + (root_entries * 32);
+  layout.fat_address = reserved_sectors * layout.bytes_per_sector;
+  layout.root_dir_address = layout.fat_address + 
+                            (fat_count * sectors_per_fat * layout.bytes_per_sector);
+  layout.data_area_start = layout.root_dir_address + (root_entries * DIR_ENTRY_ENRTY_SIZE);
   layout.cluster_size = layout.bytes_per_sector * layout.sectors_per_cluster;
 
   return layout;
@@ -160,6 +165,20 @@ void RootFilesInfo(int fat_img, const Fat16Layout* layout) {
   }
 }
 
+uint16_t GetNextCluster(int fat_img, const Fat16Layout* layout, uint16_t cluster_num) {
+  uint32_t cluster_offset = layout->fat_address + cluster_num * 2;
+  lseek(fat_img, cluster_offset, SEEK_SET);
+
+  uint16_t next_cluster = 0;
+  int res = read(fat_img, &next_cluster, sizeof(next_cluster));
+  if (res == -1) {
+    fprintf(stderr, "Failed read next cluster num\n");
+    return CLUSTER_END_FLAG;
+  }
+
+  return next_cluster;
+}
+
 void PrintFileContent(int fat_img, const Fat16Layout* layout, const char* file_path) {
   assert(file_path != NULL);
 
@@ -207,13 +226,15 @@ void PrintFileContent(int fat_img, const Fat16Layout* layout, const char* file_p
     return;
   }
 
-  uint32_t cluster_offset = layout->data_area_start + (first_cluster - 2) * layout->cluster_size;
-  lseek(fat_img, cluster_offset, SEEK_SET);
-
   uint8_t* cluster_data = (uint8_t*)calloc(layout->cluster_size, sizeof(uint8_t));
   uint32_t remaining_bytes = file_size;
 
-  while (remaining_bytes > 0) {
+  uint16_t cur_cluster = first_cluster;
+
+  while (remaining_bytes > 0 || cur_cluster != CLUSTER_END_FLAG) {
+    uint32_t cluster_offset = layout->data_area_start + (cur_cluster - 2) * layout->cluster_size;
+    lseek(fat_img, cluster_offset, SEEK_SET);
+
     int res = read(fat_img, cluster_data, layout->cluster_size);
     if (res == -1) {
       fprintf(stderr, "Failed read cluster data\n");
@@ -226,9 +247,7 @@ void PrintFileContent(int fat_img, const Fat16Layout* layout, const char* file_p
     fwrite(cluster_data, 1, bytes_to_write, stdout);
     remaining_bytes -= bytes_to_write;
 
-    if (bytes_to_write < layout->cluster_size) {
-      break;
-    }
+    cur_cluster = GetNextCluster(fat_img, layout, cur_cluster);
   }
 
   free(cluster_data);
