@@ -13,9 +13,7 @@
 #define FAT_NAME_MAX_LEN 256
 
 #define DIR_ENTRY_ENRTY_SIZE 32
-#define DELETE_FILE_FLAG 0xe5
 #define LFN_ATTR 0x0f
-#define CLUSTER_END_FLAG 0xffff
 
 typedef struct {
   uint32_t root_dir_address;
@@ -135,7 +133,7 @@ void RootFilesInfo(int fat_img, const Fat16Layout* layout) {
       break;
     }
 
-    if (dir_entry[0] == DELETE_FILE_FLAG) {
+    if (dir_entry[0] == DELETED_FLAG) {
       continue;
     }
 
@@ -173,7 +171,7 @@ uint16_t GetNextCluster(int fat_img, const Fat16Layout* layout, uint16_t cluster
   int res = read(fat_img, &next_cluster, sizeof(next_cluster));
   if (res == -1) {
     fprintf(stderr, "Failed read next cluster num\n");
-    return CLUSTER_END_FLAG;
+    return EOF_FAT16;
   }
 
   return next_cluster;
@@ -201,7 +199,7 @@ void PrintFileContent(int fat_img, const Fat16Layout* layout, const char* file_p
       break;
     }
 
-    if (dir_entry[0] == DELETE_FILE_FLAG) {
+    if (dir_entry[0] == DELETED_FLAG) {
       continue;
     }
 
@@ -231,7 +229,7 @@ void PrintFileContent(int fat_img, const Fat16Layout* layout, const char* file_p
 
   uint16_t cur_cluster = first_cluster;
 
-  while (remaining_bytes > 0 || cur_cluster != CLUSTER_END_FLAG) {
+  while (remaining_bytes > 0 || cur_cluster != EOF_FAT16) {
     uint32_t cluster_offset = layout->data_area_start + (cur_cluster - 2) * layout->cluster_size;
     lseek(fat_img, cluster_offset, SEEK_SET);
 
