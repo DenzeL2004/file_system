@@ -242,7 +242,7 @@ void Ext2Reader::InodeDataIterator::NextBlock() {
 }
 
 bool Ext2Reader::InodeDataIterator::IsEnd() const{
-  return processed_blocks_count_ >= max_blocks_count_;
+  return processed_blocks_count_ >= max_blocks_count_ || block_num_ == 0;
 }
 
 void Ext2Reader::InodeDataIterator::ReadBlockNum() {
@@ -263,7 +263,9 @@ void Ext2Reader::InodeDataIterator::ReadBlockNum() {
   
   if (indirect_index < ptrs_per_block) {
     uint32_t ind_block_num = inode_.i_block[EXT2_IND_BLOCK];
-    if (ind_block_num == 0) { block_num_ = 0; return; }
+    if (ind_block_num == 0) { 
+      block_num_ = 0; return; 
+    }
     
     if (ind_block_num != current_layer1_block_num_) {
       ext2_reader_.ReadRawBlock(ind_block_num, reinterpret_cast<uint8_t*>(layer1_buffer_));
@@ -284,7 +286,10 @@ void Ext2Reader::InodeDataIterator::ReadBlockNum() {
     size_t ptr2_index = index_in_dbl % ptrs_per_block; 
 
     uint32_t dbl_indirect_block_num = inode_.i_block[EXT2_DIND_BLOCK];
-    if (dbl_indirect_block_num == 0) { block_num_ = 0; return; }
+    if (dbl_indirect_block_num == 0) { 
+      block_num_ = 0; 
+      return; 
+    }
     
     if (dbl_indirect_block_num != current_layer1_block_num_) {
       ext2_reader_.ReadRawBlock(dbl_indirect_block_num, reinterpret_cast<uint8_t*>(layer1_buffer_));
@@ -292,11 +297,14 @@ void Ext2Reader::InodeDataIterator::ReadBlockNum() {
     }
 
     uint32_t ptr2_block_num = layer1_buffer_[ptr1_index]; 
-    if (ptr2_block_num == 0) { block_num_ = 0; return; }
+    if (ptr2_block_num == 0) { 
+      block_num_ = 0; 
+      return; 
+    }
     
     if (ptr2_block_num != current_layer2_block_num_) {
-        ext2_reader_.ReadRawBlock(ptr2_block_num, reinterpret_cast<uint8_t*>(layer2_buffer_));
-        current_layer2_block_num_ = ptr2_block_num;
+      ext2_reader_.ReadRawBlock(ptr2_block_num, reinterpret_cast<uint8_t*>(layer2_buffer_));
+      current_layer2_block_num_ = ptr2_block_num;
     }
     
     block_num_ = layer2_buffer_[ptr2_index];
@@ -315,7 +323,10 @@ void Ext2Reader::InodeDataIterator::ReadBlockNum() {
     size_t ptr3_index = remaining_index % ptrs_per_block;
 
     uint32_t trp_indirect_block_num = inode_.i_block[EXT2_TIND_BLOCK];
-    if (trp_indirect_block_num == 0) { block_num_ = 0; return; }
+    if (trp_indirect_block_num == 0) { 
+      block_num_ = 0; 
+      return; 
+    }
 
     if (trp_indirect_block_num != current_layer1_block_num_) {
       ext2_reader_.ReadRawBlock(trp_indirect_block_num, reinterpret_cast<uint8_t*>(layer1_buffer_));
@@ -323,7 +334,10 @@ void Ext2Reader::InodeDataIterator::ReadBlockNum() {
     }
     
     uint32_t ptr2_block_num = layer1_buffer_[ptr1_index]; 
-    if (ptr2_block_num == 0) { block_num_ = 0; return; }
+    if (ptr2_block_num == 0) { 
+      block_num_ = 0; 
+      return; 
+    }
 
     if (ptr2_block_num != current_layer2_block_num_) {
       ext2_reader_.ReadRawBlock(ptr2_block_num, reinterpret_cast<uint8_t*>(layer2_buffer_));
@@ -331,7 +345,10 @@ void Ext2Reader::InodeDataIterator::ReadBlockNum() {
     }
     
     uint32_t ptr3_block_num = layer2_buffer_[ptr2_index]; 
-    if (ptr3_block_num == 0) { block_num_ = 0; return; }
+    if (ptr3_block_num == 0) { 
+      block_num_ = 0; 
+      return; 
+    }
     
     if (ptr3_block_num != current_layer3_block_num_) {
       ext2_reader_.ReadRawBlock(ptr3_block_num, reinterpret_cast<uint8_t*>(layer3_buffer_));
