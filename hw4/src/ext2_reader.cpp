@@ -489,12 +489,13 @@ void Ext2Reader::DirContent(const ext2_inode& inode) const {
       
       std::memcpy(&dir_entry, buffer + offset, sizeof(dir_entry));
      
-      if (dir_entry.rec_len == 0 || dir_entry.inode == 0) 
-        break;
+      if (dir_entry.rec_len == 0) 
+        break; 
 
-      
-      std::string type_name = FileTypeToString(dir_entry.file_type);
-      std::printf("%.*s %s\n", dir_entry.name_len, dir_entry.name, type_name.c_str());
+      if (dir_entry.inode != 0) {
+        std::string type_name = FileTypeToString(dir_entry.file_type);
+        std::printf("%.*s %s\n", dir_entry.name_len, dir_entry.name, type_name.c_str());
+      }
 
       offset += dir_entry.rec_len;
     }
