@@ -88,17 +88,17 @@ uint64_t Ext2Reader::GetBlockSize() const {
 }
 
 void Ext2Reader::ReadRawBlock(uint32_t block_num, uint8_t* buffer) const {
-    uint64_t block_size = GetBlockSize();
-    if (block_num == 0) {
-        memset(buffer, 0, block_size);
-        return;
-    }
-    uint64_t physical_offset = static_cast<uint64_t>(block_num) * block_size;
-    
-    size_t res = pread(ing_fd_, buffer, block_size, physical_offset);
-    if (res != block_size) {
-        throw std::runtime_error("Error reading raw block: " + std::to_string(block_num));
-    }
+  uint64_t block_size = GetBlockSize();
+  if (block_num == 0) {
+    std::memset(buffer, 0, block_size);
+    return;
+  }
+  uint64_t physical_offset = static_cast<uint64_t>(block_num) * block_size;
+  
+  size_t res = pread(ing_fd_, buffer, block_size, physical_offset);
+  if (res != block_size) {
+    throw std::runtime_error("error reading raw block: " + std::to_string(block_num));
+  }
 }
 
 uint32_t Ext2Reader::GetPointersPerBlock() const {
@@ -163,8 +163,6 @@ ext2_inode Ext2Reader::ReadInode(uint32_t inode_id) const {
   if (res != sizeof(ext2_inode)) {
     throw std::runtime_error("can't read inode " + std::to_string(inode_id) + " at offset " + std::to_string(physical_offset));
   }
-
-  // std::cout << inode_id << " " << inode.i_uid << " " << group_num << " " << physical_offset << std::endl;
 
   return inode;
 }
@@ -510,7 +508,7 @@ void Ext2Reader::DirContent(const ext2_inode& inode) const {
 void Ext2Reader::ShowFileBlocks(const std::string& file_path) const {
   uint32_t inode_id = FindInode(file_path);
   if (!IsInodeValid(inode_id)) {
-    std::cout << "Inode " << inode_id << " does not exist!" << std::endl;
+    std::cout << "File " << file_path << " does not exist!" << std::endl;
     return;
   }
 
